@@ -66,6 +66,21 @@
   .params-row { display:flex; gap:8px; flex-wrap:wrap; }
   .param-chip { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:12px; color:var(--text); cursor:pointer; transition:border-color 0.15s; font-family:'DM Mono',monospace; }
   .param-chip.selected { border-color:var(--sc); color:var(--sc); }
+  .param-num-wrap { display:flex; align-items:center; gap:8px; }
+  .param-num {
+    width:100%;
+    max-width:130px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:12px;
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    outline:none;
+  }
+  .param-num:focus { border-color:var(--sc); }
+  .param-num-unit { font-size:10px; color:var(--muted); letter-spacing:0.12em; text-transform:uppercase; }
   .protocol-preview { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; font-size:11px; color:var(--muted); line-height:1.9; letter-spacing:0.04em; margin-bottom:28px; }
   .protocol-preview span { color:var(--text); }
   .start-btn { width:100%; padding:20px; background:var(--sc,var(--wim)); border:none; border-radius:14px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:0.25em; text-transform:uppercase; color:#0a0a0f; cursor:pointer; transition:opacity 0.15s,transform 0.1s; margin-top:auto; }
@@ -196,6 +211,11 @@ let isPaused = false;
 let sessionStartTime = 0;
 let audioCtx = null;
 let setupParams = {};
+const WIM_SPEEDS = [
+  { value:'fast', label:'Быстро', factor:1 },
+  { value:'medium', label:'Средне', factor:2.5 },
+  { value:'slow', label:'Медленно', factor:4 },
+];
 
 // ── HISTORY ──────────────────────────────────────────
 function getHistory() {
@@ -268,14 +288,23 @@ function signal(phase) {
 // ── SETUP ─────────────────────────────────────────────
 const CONFIGS = {
   wim: {
-    name:'Вим Хоф', desc:'3 раунда гипервентиляции',
+    name:'Вим Хоф', desc:'Гипервентиляция с настройкой раундов и темпа',
     params:[],
-    preview: ()=>`<span>30</span> вдохов-выдохов<br>Задержка: <span>60</span> / <span>90</span> / <span>120</span> сек<br>Восстановление: <span>15</span> сек<br>Итого: ~12 мин`
+    preview: (p)=>{
+      const rounds = getWimRounds(p);
+      const speedCfg = getWimSpeedConfig(p.speed);
+      const holds = getWimHolds(rounds);
+      const breaths = Array.from({ length: rounds }, (_, i) => getWimBreaths(p, i));
+      const breathSec = breaths.reduce((acc, b) => acc + b * 2 * speedCfg.factor, 0);
+      const holdSec = holds.reduce((acc, h) => acc + h, 0) + rounds * 15;
+      const roundsLine = breaths.map((b, i) => `R${i + 1}: <span>${b}</span>`).join(' · ');
+      return `Скорость: <span>${speedCfg.label}</span> (${speedCfg.factor}x)<br>Раунды: <span>${rounds}</span> · ${roundsLine}<br>Задержка на выдохе: ${holds.map(h => `<span>${h}</span>`).join(' / ')} сек<br>Восстановление: <span>15</span> сек каждый раунд<br>Итого: ~${fmtTime(breathSec + holdSec)}`;
+    }
   },
   hub: {
     name:'Хьюберман', desc:'Physiological sigh — снижение тревоги',
     params:[],
-    preview: ()=>`Двойной вдох носом → долгий выдох ртом<br>Длительность: <span>5 минут</span><br>~40–50 циклов`
+    preview: ()=>`Двойной вдох носом → долгий выдох ртом<br>Темп: <span>в 3 раза медленнее</span><br>Длительность: <span>5 минут</span>`
   },
   box: {
     name:'Box Breathing', desc:'Квадрат — баланс нервной системы',
@@ -289,12 +318,50 @@ const CONFIGS = {
   },
 };
 
+function getWimSpeedConfig(speedValue) {
+  return WIM_SPEEDS.find(s => s.value === speedValue) || WIM_SPEEDS[0];
+}
+
+function getWimRounds(params) {
+  const value = parseInt(params.rounds, 10);
+  return Number.isFinite(value) ? Math.min(5, Math.max(1, value)) : 3;
+}
+
+function getWimBreaths(params, roundIdx) {
+  const key = `breaths_${roundIdx + 1}`;
+  const value = parseInt(params[key], 10);
+  return Number.isFinite(value) ? Math.min(60, Math.max(10, value)) : 30;
+}
+
+function getWimHolds(rounds) {
+  return Array.from({ length: rounds }, (_, i) => 60 + i * 30);
+}
+
+function getSetupParamsForTech(tech, paramsState = {}) {
+  if (tech !== 'wim') return CONFIGS[tech].params;
+  const rounds = getWimRounds(paramsState);
+  const base = [
+    { label:'Скорость цикла', key:'speed', options:WIM_SPEEDS.map(s => ({ value:s.value, label:s.label })), default:'fast' },
+    { label:'Раунды', key:'rounds', options:[1,2,3,4,5], default:3 },
+  ];
+  const perRound = Array.from({ length: rounds }, (_, i) => ({
+    label:`Вдохи/выдохи · раунд ${i + 1}`,
+    key:`breaths_${i + 1}`,
+    type:'number',
+    min:10,
+    max:60,
+    step:1,
+    default:30,
+    unit:'циклов'
+  }));
+  return [...base, ...perRound];
+}
+
 function openSetup(tech) {
   currentTech = tech;
   const cfg = CONFIGS[tech];
   const color = COLORS[tech];
   setupParams = {};
-  cfg.params.forEach(p => setupParams[p.key] = p.default);
 
   const setupEl = document.getElementById('setup');
   setColor(setupEl, color);
@@ -302,28 +369,73 @@ function openSetup(tech) {
   document.getElementById('setupDesc').textContent = cfg.desc;
 
   const container = document.getElementById('setupParams');
-  container.innerHTML = '';
-  cfg.params.forEach(param => {
-    const sec = document.createElement('div');
-    sec.className = 'setup-section';
-    sec.innerHTML = `<div class="setup-section-label">${param.label}</div><div class="params-row" id="pr_${param.key}"></div>`;
-    container.appendChild(sec);
-    const row = sec.querySelector('.params-row');
-    param.options.forEach(opt => {
-      const chip = document.createElement('div');
-      chip.className = 'param-chip' + (opt === param.default ? ' selected' : '');
-      chip.textContent = opt + (param.unit ? ' ' + param.unit : '');
-      chip.onclick = () => {
-        setupParams[param.key] = opt;
-        row.querySelectorAll('.param-chip').forEach(c => c.classList.remove('selected'));
-        chip.classList.add('selected');
-        updatePreview();
-      };
-      row.appendChild(chip);
+  function renderSetupParams() {
+    const paramsDef = getSetupParamsForTech(tech, setupParams);
+    paramsDef.forEach(p => {
+      if (setupParams[p.key] === undefined) setupParams[p.key] = p.default;
     });
-  });
 
-  updatePreview();
+    container.innerHTML = '';
+    paramsDef.forEach(param => {
+      const sec = document.createElement('div');
+      sec.className = 'setup-section';
+      sec.innerHTML = `<div class="setup-section-label">${param.label}</div><div class="params-row" id="pr_${param.key}"></div>`;
+      container.appendChild(sec);
+      const row = sec.querySelector('.params-row');
+
+      if (param.type === 'number') {
+        const wrap = document.createElement('div');
+        wrap.className = 'param-num-wrap';
+        const input = document.createElement('input');
+        input.className = 'param-num';
+        input.type = 'number';
+        input.min = param.min;
+        input.max = param.max;
+        input.step = param.step || 1;
+        input.value = setupParams[param.key];
+        input.onchange = () => {
+          const raw = parseInt(input.value, 10);
+          const fallback = param.default || param.min || 1;
+          const next = Number.isFinite(raw) ? raw : fallback;
+          const clamped = Math.min(param.max || next, Math.max(param.min || next, next));
+          input.value = clamped;
+          setupParams[param.key] = clamped;
+          updatePreview();
+        };
+        wrap.appendChild(input);
+        if (param.unit) {
+          const unit = document.createElement('div');
+          unit.className = 'param-num-unit';
+          unit.textContent = param.unit;
+          wrap.appendChild(unit);
+        }
+        row.appendChild(wrap);
+        return;
+      }
+
+      param.options.forEach(optRaw => {
+        const value = typeof optRaw === 'object' ? optRaw.value : optRaw;
+        const label = typeof optRaw === 'object' ? optRaw.label : optRaw;
+        const chip = document.createElement('div');
+        chip.className = 'param-chip' + (setupParams[param.key] === value ? ' selected' : '');
+        chip.textContent = label + (param.unit ? ' ' + param.unit : '');
+        chip.onclick = () => {
+          setupParams[param.key] = value;
+          if (tech === 'wim' && param.key === 'rounds') {
+            renderSetupParams();
+          } else {
+            row.querySelectorAll('.param-chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            updatePreview();
+          }
+        };
+        row.appendChild(chip);
+      });
+    });
+    updatePreview();
+  }
+
+  renderSetupParams();
   showScreen('setup');
 }
 function updatePreview() {
@@ -408,18 +520,22 @@ function fmtTime(sec) {
 
 // ── WIM HOF ───────────────────────────────────────────
 function runWim() {
-  const HOLDS = [60, 90, 120];
-  const BREATHS = 30;
+  const rounds = getWimRounds(setupParams);
+  const HOLDS = getWimHolds(rounds);
+  const BREATHS = Array.from({ length: rounds }, (_, i) => getWimBreaths(setupParams, i));
+  const speedCfg = getWimSpeedConfig(setupParams.speed);
   let round = 0, breathCount = 0;
   let phase = 'breathing'; // 'breathing' | 'hold_exhale' | 'hold_inhale'
   let isInhale = true;
   let phaseT = 0, holdT = 0;
-  const BREATH_HALF = 1.0; // seconds per inhale or exhale
+  const BREATH_HALF = 1.0 * speedCfg.factor; // seconds per inhale or exhale
   let last = Date.now();
+  const getRoundBreaths = () => BREATHS[round] || 30;
 
   function dotsHTML() {
+    const roundBreaths = getRoundBreaths();
     return '<div class="wim-dots">' +
-      Array.from({length: BREATHS}, (_,i) =>
+      Array.from({length: roundBreaths}, (_,i) =>
         `<div class="wdot ${i < breathCount ? 'done' : i === breathCount ? 'cur' : ''}"></div>`
       ).join('') + '</div>';
   }
@@ -428,7 +544,8 @@ function runWim() {
     const center = document.getElementById('sessionCenter');
     if (!center) return;
     if (phase === 'breathing') {
-      center.innerHTML = orbHTML(isInhale ? 'вдох' : 'выдох', `${breathCount + 1}`, dotsHTML());
+      const roundBreaths = getRoundBreaths();
+      center.innerHTML = orbHTML(isInhale ? 'вдох' : 'выдох', `${Math.min(breathCount + 1, roundBreaths)}/${roundBreaths}`, dotsHTML());
       setOrb(isInhale ? 'inhale' : 'exhale', phaseT / BREATH_HALF);
     } else if (phase === 'hold_exhale') {
       const left = HOLDS[round] - holdT;
@@ -439,7 +556,7 @@ function runWim() {
       center.innerHTML = orbHTML('вдох — задержка', fmtTime(left));
       setOrb('hold', holdT / 15);
     }
-    document.getElementById('sessionRoundInfo').textContent = `Раунд ${round + 1} / 3`;
+    document.getElementById('sessionRoundInfo').textContent = `Раунд ${round + 1} / ${rounds}`;
   }
 
   render();
@@ -457,7 +574,7 @@ function runWim() {
         phaseT = 0;
         if (!isInhale) {
           breathCount++;
-          if (breathCount >= BREATHS) {
+          if (breathCount >= getRoundBreaths()) {
             breathCount = 0;
             phase = 'hold_exhale';
             holdT = 0;
@@ -479,7 +596,7 @@ function runWim() {
       holdT += dt;
       if (holdT >= 15) {
         round++;
-        if (round >= 3) { finishSession(); return; }
+        if (round >= rounds) { finishSession(); return; }
         phase = 'breathing'; phaseT = 0; holdT = 0; isInhale = true;
         signal('exhale');
       }
@@ -492,7 +609,7 @@ function runWim() {
 function runHub() {
   const TOTAL = 5 * 60;
   let elapsed = 0, cyclePos = 0;
-  const I1 = 2, I2 = 0.5, EX = 4.5, CYCLE = I1 + I2 + EX;
+  const I1 = 6, I2 = 1.5, EX = 13.5, CYCLE = I1 + I2 + EX;
   let lastPhase = '', last = Date.now();
 
   document.getElementById('sessionCenter').innerHTML = orbHTML('вдох', '5:00');
@@ -512,6 +629,11 @@ function runHub() {
     if (pos < I1)       { ph = 'inhale1'; prog = pos / I1; }
     else if (pos < I1+I2) { ph = 'inhale2'; prog = (pos-I1)/I2; }
     else                { ph = 'exhale';  prog = (pos-I1-I2)/EX; }
+    const phaseLeft = ph === 'inhale1'
+      ? I1 - pos
+      : ph === 'inhale2'
+        ? I1 + I2 - pos
+        : CYCLE - pos;
 
     if (ph !== lastPhase) {
       lastPhase = ph;
@@ -529,7 +651,7 @@ function runHub() {
     if (orb) { orb.style.width=s+'px'; orb.style.height=s+'px'; }
     if (ring) { ring.style.width=(s+28)+'px'; ring.style.height=(s+28)+'px'; }
     if (pLabel) pLabel.textContent = lbl;
-    if (bTimer) bTimer.textContent = fmtTime(TOTAL - elapsed);
+    if (bTimer) bTimer.textContent = fmtTime(phaseLeft);
     document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
   }, 60);
 }
@@ -553,6 +675,7 @@ function runBox() {
       <div class="box-lbl">
         <div class="phase-label" id="phaseLabel">вдох</div>
         <div class="big-timer" id="bigTimer" style="font-size:50px;margin-top:4px;">5:00</div>
+        <div class="breath-counter" id="phaseTimer">4с</div>
       </div>
     </div>`;
 
@@ -569,6 +692,7 @@ function runBox() {
     const pos = elapsed % CYCLE;
     const phIdx = Math.min(Math.floor(pos / COUNT), 3);
     const phProg = (pos % COUNT) / COUNT;
+    const phaseLeft = COUNT - (pos % COUNT);
 
     if (phIdx !== lastPhIdx) {
       lastPhIdx = phIdx;
@@ -582,9 +706,11 @@ function runBox() {
     const fill = document.getElementById('boxFill');
     const pLabel = document.getElementById('phaseLabel');
     const bTimer = document.getElementById('bigTimer');
+    const phTimer = document.getElementById('phaseTimer');
     if (fill) fill.style.strokeDashoffset = 640 * (1 - totalProg);
     if (pLabel) pLabel.textContent = labels[phIdx];
     if (bTimer) bTimer.textContent = fmtTime(TOTAL - elapsed);
+    if (phTimer) phTimer.textContent = `${labels[phIdx]} · ${fmtTime(phaseLeft)}`;
     document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
   }, 60);
 }
