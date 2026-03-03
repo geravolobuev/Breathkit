@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0f">
+<title>Breath</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Fraunces:ital,opsz,wght@0,9..144,200;0,9..144,300;1,9..144,200&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --text: #e8e8f0;
+    --muted: #4a4a6a;
+    --wim: #7b6fff;
+    --hub: #ff6b9d;
+    --box: #4ecdc4;
+    --mol: #ffd166;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100dvh; overflow-x:hidden; }
+
+  .screen { display:none; min-height:100dvh; }
+  .screen.active { display:flex; flex-direction:column; }
+
+  /* HOME */
+  #home { position:relative; overflow:hidden; }
+  .home-header { padding:52px 28px 0; }
+  .logo { font-family:'Fraunces',serif; font-size:13px; font-weight:200; letter-spacing:0.3em; text-transform:uppercase; color:var(--muted); }
+  .home-title { font-family:'Fraunces',serif; font-size:clamp(44px,11vw,68px); font-weight:200; font-style:italic; line-height:0.95; margin-top:28px; letter-spacing:-0.02em; }
+  .home-subtitle { font-size:10px; color:var(--muted); letter-spacing:0.2em; margin-top:14px; text-transform:uppercase; }
+
+  .techniques-grid { padding:36px 18px 24px; display:grid; grid-template-columns:1fr 1fr; gap:10px; flex:1; }
+  .technique-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:20px 16px; cursor:pointer; transition:transform 0.12s; position:relative; overflow:hidden;
+  }
+  .technique-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--card-color); opacity:0.8; }
+  .technique-card:active { transform:scale(0.96); }
+  .technique-card[data-tech="wim"] { --card-color:var(--wim); }
+  .technique-card[data-tech="hub"] { --card-color:var(--hub); }
+  .technique-card[data-tech="box"] { --card-color:var(--box); }
+  .technique-card[data-tech="mol"] { --card-color:var(--mol); }
+  .card-dot { width:7px; height:7px; border-radius:50%; background:var(--card-color); margin-bottom:12px; }
+  .card-name { font-family:'Fraunces',serif; font-size:17px; font-weight:300; line-height:1.15; }
+  .card-meta { font-size:10px; color:var(--muted); margin-top:7px; letter-spacing:0.08em; }
+
+  .streak-bar { padding:8px 20px 16px; display:flex; align-items:center; gap:12px; }
+  .streak-label { font-size:10px; color:var(--muted); letter-spacing:0.15em; }
+  .streak-dots { display:flex; gap:5px; }
+  .streak-dot { width:6px; height:6px; border-radius:50%; background:var(--border); transition:background 0.3s; }
+  .streak-dot.done { background:var(--wim); }
+  .last-session { padding:0 20px 36px; font-size:10px; color:var(--muted); letter-spacing:0.1em; text-align:center; }
+
+  /* SETUP */
+  #setup { padding:52px 24px 40px; }
+  .back-btn { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--muted); cursor:pointer; letter-spacing:0.15em; text-transform:uppercase; background:none; border:none; color:var(--muted); font-family:'DM Mono',monospace; padding:0; margin-bottom:28px; }
+  .setup-tech-name { font-family:'Fraunces',serif; font-size:34px; font-weight:200; font-style:italic; margin-bottom:5px; }
+  .setup-tech-desc { font-size:10px; color:var(--muted); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:32px; }
+  .setup-section { margin-bottom:28px; }
+  .setup-section-label { font-size:10px; color:var(--muted); letter-spacing:0.2em; text-transform:uppercase; margin-bottom:10px; }
+  .params-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .param-chip { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:12px; color:var(--text); cursor:pointer; transition:border-color 0.15s; font-family:'DM Mono',monospace; }
+  .param-chip.selected { border-color:var(--sc); color:var(--sc); }
+  .protocol-preview { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; font-size:11px; color:var(--muted); line-height:1.9; letter-spacing:0.04em; margin-bottom:28px; }
+  .protocol-preview span { color:var(--text); }
+  .start-btn { width:100%; padding:20px; background:var(--sc,var(--wim)); border:none; border-radius:14px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:0.25em; text-transform:uppercase; color:#0a0a0f; cursor:pointer; transition:opacity 0.15s,transform 0.1s; margin-top:auto; }
+  .start-btn:active { transform:scale(0.98); opacity:0.9; }
+
+  /* SESSION */
+  #session { position:relative; align-items:center; justify-content:center; padding:0; }
+  .session-bg { position:absolute; inset:0; background:radial-gradient(ellipse at 50% 55%, var(--sc,var(--wim)) 0%, transparent 60%); opacity:0.07; transition:opacity 1s; pointer-events:none; }
+  .session-bg.active { opacity:0.13; }
+  .session-top { position:absolute; top:52px; left:0; right:0; padding:0 28px; display:flex; justify-content:space-between; align-items:flex-start; }
+  .session-tech-name { font-size:10px; color:var(--muted); letter-spacing:0.2em; text-transform:uppercase; }
+  .session-round-info { font-size:10px; color:var(--muted); letter-spacing:0.12em; text-align:right; }
+  .session-center { display:flex; flex-direction:column; align-items:center; gap:28px; }
+  .session-bottom { position:absolute; bottom:40px; left:0; right:0; padding:0 28px; display:flex; justify-content:center; gap:14px; }
+  .sess-btn { background:var(--surface); border:1px solid var(--border); border-radius:50px; padding:14px 26px; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); cursor:pointer; transition:border-color 0.15s,color 0.15s; }
+  .sess-btn:active { color:var(--text); border-color:var(--muted); }
+
+  /* Orb */
+  .orb-container { position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; }
+  .orb { position:absolute; border-radius:50%; transition:width 0.25s ease,height 0.25s ease; }
+  .orb-ring { position:absolute; border-radius:50%; border:1px solid var(--sc,var(--wim)); opacity:0.18; transition:width 0.8s ease,height 0.8s ease; }
+  .phase-label { font-family:'Fraunces',serif; font-size:13px; font-weight:200; font-style:italic; color:var(--text); letter-spacing:0.05em; position:relative; z-index:2; text-align:center; }
+  .big-timer { font-family:'Fraunces',serif; font-size:76px; font-weight:200; font-style:italic; line-height:1; color:var(--text); letter-spacing:-0.03em; min-width:140px; text-align:center; }
+  .breath-counter { font-size:10px; color:var(--muted); letter-spacing:0.2em; text-transform:uppercase; text-align:center; }
+
+  .wim-dots { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; max-width:260px; }
+  .wdot { width:7px; height:7px; border-radius:50%; background:var(--border); transition:background 0.08s; }
+  .wdot.done { background:var(--sc,var(--wim)); }
+  .wdot.cur { background:var(--sc,var(--wim)); box-shadow:0 0 7px var(--sc,var(--wim)); }
+
+  .tap-hint { font-size:10px; color:var(--muted); letter-spacing:0.15em; text-align:center; margin-top:-18px; animation:ptxt 2s ease-in-out infinite; }
+  @keyframes ptxt { 0%,100%{opacity:0.3} 50%{opacity:0.9} }
+
+  /* Box */
+  .box-wrap { position:relative; width:200px; height:200px; }
+  .box-svg { width:100%; height:100%; transform:rotate(-90deg); }
+  .box-track { fill:none; stroke:var(--border); stroke-width:1.5; }
+  .box-fill { fill:none; stroke:var(--sc,var(--box)); stroke-width:2; stroke-linecap:round; transition:stroke-dashoffset 0.08s linear; }
+  .box-lbl { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+
+  /* DONE */
+  #done { align-items:center; justify-content:center; padding:40px 28px; text-align:center; gap:22px; }
+  .done-icon { width:68px; height:68px; border-radius:50%; border:1px solid var(--sc,var(--wim)); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--sc,var(--wim)); }
+  .done-title { font-family:'Fraunces',serif; font-size:40px; font-weight:200; font-style:italic; }
+  .done-stats { font-size:10px; color:var(--muted); letter-spacing:0.15em; line-height:2.2; text-transform:uppercase; }
+  .done-stats span { color:var(--text); }
+  .done-btn { padding:16px 44px; border-radius:50px; border:1px solid var(--sc,var(--wim)); background:none; color:var(--sc,var(--wim)); font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="home" class="screen active">
+  <div class="home-header">
+    <div class="logo">Breath</div>
+    <div class="home-title">дышать<br>правильно</div>
+    <div class="home-subtitle">Выбери технику</div>
+  </div>
+  <div class="techniques-grid">
+    <div class="technique-card" data-tech="wim" onclick="openSetup('wim')">
+      <div class="card-dot"></div>
+      <div class="card-name">Вим<br>Хоф</div>
+      <div class="card-meta">3 раунда · ~12 мин</div>
+    </div>
+    <div class="technique-card" data-tech="hub" onclick="openSetup('hub')">
+      <div class="card-dot"></div>
+      <div class="card-name">Хьюбер-<br>ман</div>
+      <div class="card-meta">Сигх · 5 мин</div>
+    </div>
+    <div class="technique-card" data-tech="box" onclick="openSetup('box')">
+      <div class="card-dot"></div>
+      <div class="card-name">Box<br>Breathing</div>
+      <div class="card-meta">Квадрат · 5 мин</div>
+    </div>
+    <div class="technique-card" data-tech="mol" onclick="openSetup('mol')">
+      <div class="card-dot"></div>
+      <div class="card-name">Молча-<br>нов</div>
+      <div class="card-meta">Пирамида · ~7 мин</div>
+    </div>
+  </div>
+  <div class="streak-bar">
+    <div class="streak-label">Серия</div>
+    <div class="streak-dots" id="streakDots"></div>
+  </div>
+  <div class="last-session" id="lastSessionInfo"></div>
+</div>
+
+<!-- SETUP -->
+<div id="setup" class="screen">
+  <button class="back-btn" onclick="showScreen('home')">← назад</button>
+  <div class="setup-tech-name" id="setupName"></div>
+  <div class="setup-tech-desc" id="setupDesc"></div>
+  <div id="setupParams"></div>
+  <div class="protocol-preview" id="protocolPreview"></div>
+  <div style="flex:1"></div>
+  <button class="start-btn" onclick="startSession()">Начать</button>
+</div>
+
+<!-- SESSION -->
+<div id="session" class="screen">
+  <div class="session-bg" id="sessionBg"></div>
+  <div class="session-top">
+    <div class="session-tech-name" id="sessionTechName"></div>
+    <div class="session-round-info" id="sessionRoundInfo"></div>
+  </div>
+  <div class="session-center" id="sessionCenter"></div>
+  <div class="session-bottom">
+    <button class="sess-btn" onclick="togglePause()" id="pauseBtn">Пауза</button>
+    <button class="sess-btn" onclick="stopSession()">Стоп</button>
+  </div>
+</div>
+
+<!-- DONE -->
+<div id="done" class="screen">
+  <div class="done-icon" id="doneIcon">✦</div>
+  <div class="done-title">Готово</div>
+  <div class="done-stats" id="doneStats"></div>
+  <button class="done-btn" id="doneBtn" onclick="showScreen('home')">На главную</button>
+</div>
+
+<script>
+const COLORS = { wim:'#7b6fff', hub:'#ff6b9d', box:'#4ecdc4', mol:'#ffd166' };
+const NAMES  = { wim:'Вим Хоф', hub:'Хьюберман', box:'Box Breathing', mol:'Молчанов' };
+
+let currentTech = null;
+let sessionTimer = null;
+let isPaused = false;
+let sessionStartTime = 0;
+let audioCtx = null;
+let setupParams = {};
+
+// ── HISTORY ──────────────────────────────────────────
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem('bh') || '[]'); } catch(e) { return []; }
+}
+function saveSession(tech, dur) {
+  const h = getHistory();
+  h.push({ tech, dur, date: new Date().toDateString(), ts: Date.now() });
+  localStorage.setItem('bh', JSON.stringify(h.slice(-90)));
+}
+function renderStreak() {
+  const h = getHistory();
+  const days = [...new Set(h.map(x => x.date))].sort();
+  let streak = 0;
+  const d = new Date();
+  for (let i = 0; i < 14; i++) {
+    if (days.includes(d.toDateString())) streak++;
+    else if (i > 0) break;
+    d.setDate(d.getDate() - 1);
+  }
+  const dots = document.getElementById('streakDots');
+  dots.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot' + (i < streak ? ' done' : '');
+    dots.appendChild(dot);
+  }
+  const info = document.getElementById('lastSessionInfo');
+  if (h.length > 0) {
+    const l = h[h.length - 1];
+    info.textContent = `последнее: ${NAMES[l.tech]} · ${l.date}`;
+  }
+}
+
+// ── SCREENS ───────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'home') renderStreak();
+}
+function setColor(el, color) { el.style.setProperty('--sc', color); }
+
+// ── AUDIO ─────────────────────────────────────────────
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function beep(freq, type='sine', dur=0.18, vol=0.3) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.type = type; osc.frequency.value = freq;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+function vib(p) { if (navigator.vibrate) navigator.vibrate(p); }
+function signal(phase) {
+  const s = {
+    inhale:  () => { beep(523,'sine',0.2,0.3); vib(60); },
+    exhale:  () => { beep(349,'sine',0.25,0.25); vib(40); },
+    hold:    () => { beep(261,'triangle',0.3,0.2); vib([30,30,30]); },
+    start:   () => { beep(659,'sine',0.4,0.38); vib([80,40,80]); },
+    done:    () => { beep(784,'sine',0.5,0.38); setTimeout(()=>beep(1047,'sine',0.5,0.35),300); vib([100,50,200]); },
+  };
+  if (s[phase]) s[phase]();
+}
+
+// ── SETUP ─────────────────────────────────────────────
+const CONFIGS = {
+  wim: {
+    name:'Вим Хоф', desc:'3 раунда гипервентиляции',
+    params:[],
+    preview: ()=>`<span>30</span> вдохов-выдохов<br>Задержка: <span>60</span> / <span>90</span> / <span>120</span> сек<br>Восстановление: <span>15</span> сек<br>Итого: ~12 мин`
+  },
+  hub: {
+    name:'Хьюберман', desc:'Physiological sigh — снижение тревоги',
+    params:[],
+    preview: ()=>`Двойной вдох носом → долгий выдох ртом<br>Длительность: <span>5 минут</span><br>~40–50 циклов`
+  },
+  box: {
+    name:'Box Breathing', desc:'Квадрат — баланс нервной системы',
+    params:[{ label:'Счёт', key:'count', options:[4,5,6], default:4, unit:'сек' }],
+    preview: (p)=>`Вдох <span>${p.count}с</span> → Задержка <span>${p.count}с</span> → Выдох <span>${p.count}с</span> → Задержка <span>${p.count}с</span><br>Длительность: <span>5 мин</span>`
+  },
+  mol: {
+    name:'Молчанов', desc:'Пирамида фридайвера',
+    params:[],
+    preview: ()=>`5с → ... → 15с → ... → 5с<br>21 раунд · ~7 мин<br>Волновое дыхание: <span>живот → рёбра → грудь</span>`
+  },
+};
+
+function openSetup(tech) {
+  currentTech = tech;
+  const cfg = CONFIGS[tech];
+  const color = COLORS[tech];
+  setupParams = {};
+  cfg.params.forEach(p => setupParams[p.key] = p.default);
+
+  const setupEl = document.getElementById('setup');
+  setColor(setupEl, color);
+  document.getElementById('setupName').textContent = cfg.name;
+  document.getElementById('setupDesc').textContent = cfg.desc;
+
+  const container = document.getElementById('setupParams');
+  container.innerHTML = '';
+  cfg.params.forEach(param => {
+    const sec = document.createElement('div');
+    sec.className = 'setup-section';
+    sec.innerHTML = `<div class="setup-section-label">${param.label}</div><div class="params-row" id="pr_${param.key}"></div>`;
+    container.appendChild(sec);
+    const row = sec.querySelector('.params-row');
+    param.options.forEach(opt => {
+      const chip = document.createElement('div');
+      chip.className = 'param-chip' + (opt === param.default ? ' selected' : '');
+      chip.textContent = opt + (param.unit ? ' ' + param.unit : '');
+      chip.onclick = () => {
+        setupParams[param.key] = opt;
+        row.querySelectorAll('.param-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        updatePreview();
+      };
+      row.appendChild(chip);
+    });
+  });
+
+  updatePreview();
+  showScreen('setup');
+}
+function updatePreview() {
+  document.getElementById('protocolPreview').innerHTML = CONFIGS[currentTech].preview(setupParams);
+}
+
+// ── SESSION ───────────────────────────────────────────
+function startSession() {
+  initAudio();
+  const color = COLORS[currentTech];
+  const sess = document.getElementById('session');
+  const done = document.getElementById('done');
+  setColor(sess, color); setColor(done, color);
+  document.getElementById('sessionTechName').textContent = NAMES[currentTech];
+  document.getElementById('sessionBg').classList.remove('active');
+  document.getElementById('sessionBg').style.setProperty('--sc', color);
+  isPaused = false;
+  sessionStartTime = Date.now();
+  document.getElementById('pauseBtn').textContent = 'Пауза';
+  showScreen('session');
+  setTimeout(() => document.getElementById('sessionBg').classList.add('active'), 100);
+
+  if (currentTech === 'wim') runWim();
+  else if (currentTech === 'hub') runHub();
+  else if (currentTech === 'box') runBox();
+  else if (currentTech === 'mol') runMol();
+}
+
+function togglePause() {
+  isPaused = !isPaused;
+  document.getElementById('pauseBtn').textContent = isPaused ? 'Продолжить' : 'Пауза';
+}
+function stopSession() {
+  clearInterval(sessionTimer);
+  sessionTimer = null;
+  showScreen('home');
+}
+function finishSession() {
+  clearInterval(sessionTimer);
+  sessionTimer = null;
+  signal('done');
+  const dur = Math.round((Date.now() - sessionStartTime) / 1000);
+  saveSession(currentTech, dur);
+  document.getElementById('doneStats').innerHTML =
+    `Техника: <span>${NAMES[currentTech]}</span><br>Время: <span>${Math.floor(dur/60)}м ${dur%60}с</span>`;
+  showScreen('done');
+}
+
+// ── ORB ───────────────────────────────────────────────
+function setOrb(phase, progress) {
+  const orb = document.getElementById('orb');
+  const ring = document.getElementById('orbRing');
+  if (!orb) return;
+  const color = COLORS[currentTech];
+  orb.style.background = `radial-gradient(circle at 35% 35%, color-mix(in srgb, ${color} 50%, white), ${color})`;
+  let s;
+  if (phase === 'inhale') s = 80 + progress * 100;
+  else if (phase === 'exhale') s = 180 - progress * 100;
+  else if (phase === 'hold') s = 180;
+  else s = 60; // hold exhale / empty
+  orb.style.width = s + 'px'; orb.style.height = s + 'px';
+  if (ring) { ring.style.width = (s + 28) + 'px'; ring.style.height = (s + 28) + 'px'; }
+}
+
+function orbHTML(phaseText, timerText, extra='') {
+  return `
+    <div class="orb-container">
+      <div class="orb-ring" id="orbRing" style="width:108px;height:108px;"></div>
+      <div class="orb" id="orb" style="width:80px;height:80px;"></div>
+      <div class="phase-label" id="phaseLabel">${phaseText}</div>
+    </div>
+    <div class="big-timer" id="bigTimer">${timerText}</div>
+    ${extra}`;
+}
+
+function fmtTime(sec) {
+  const s = Math.max(0, Math.ceil(sec));
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return m > 0 ? `${m}:${ss.toString().padStart(2,'0')}` : `${ss}с`;
+}
+
+// ── WIM HOF ───────────────────────────────────────────
+function runWim() {
+  const HOLDS = [60, 90, 120];
+  const BREATHS = 30;
+  let round = 0, breathCount = 0;
+  let phase = 'breathing'; // 'breathing' | 'hold_exhale' | 'hold_inhale'
+  let isInhale = true;
+  let phaseT = 0, holdT = 0;
+  const BREATH_HALF = 1.0; // seconds per inhale or exhale
+  let last = Date.now();
+
+  function dotsHTML() {
+    return '<div class="wim-dots">' +
+      Array.from({length: BREATHS}, (_,i) =>
+        `<div class="wdot ${i < breathCount ? 'done' : i === breathCount ? 'cur' : ''}"></div>`
+      ).join('') + '</div>';
+  }
+
+  function render() {
+    const center = document.getElementById('sessionCenter');
+    if (!center) return;
+    if (phase === 'breathing') {
+      center.innerHTML = orbHTML(isInhale ? 'вдох' : 'выдох', `${breathCount + 1}`, dotsHTML());
+      setOrb(isInhale ? 'inhale' : 'exhale', phaseT / BREATH_HALF);
+    } else if (phase === 'hold_exhale') {
+      const left = HOLDS[round] - holdT;
+      center.innerHTML = orbHTML('задержка', fmtTime(left), `<div class="tap-hint">задержка на выдохе</div>`);
+      setOrb('hold_exhale', 0);
+    } else {
+      const left = 15 - holdT;
+      center.innerHTML = orbHTML('вдох — задержка', fmtTime(left));
+      setOrb('hold', holdT / 15);
+    }
+    document.getElementById('sessionRoundInfo').textContent = `Раунд ${round + 1} / 3`;
+  }
+
+  render();
+  signal('start');
+
+  sessionTimer = setInterval(() => {
+    if (isPaused) return;
+    const now = Date.now();
+    const dt = (now - last) / 1000;
+    last = now;
+
+    if (phase === 'breathing') {
+      phaseT += dt;
+      if (phaseT >= BREATH_HALF) {
+        phaseT = 0;
+        if (!isInhale) {
+          breathCount++;
+          if (breathCount >= BREATHS) {
+            breathCount = 0;
+            phase = 'hold_exhale';
+            holdT = 0;
+            signal('hold');
+            render(); return;
+          }
+        }
+        isInhale = !isInhale;
+        signal(isInhale ? 'inhale' : 'exhale');
+      }
+    } else if (phase === 'hold_exhale') {
+      holdT += dt;
+      if (holdT >= HOLDS[round]) {
+        phase = 'hold_inhale';
+        holdT = 0;
+        signal('inhale');
+      }
+    } else {
+      holdT += dt;
+      if (holdT >= 15) {
+        round++;
+        if (round >= 3) { finishSession(); return; }
+        phase = 'breathing'; phaseT = 0; holdT = 0; isInhale = true;
+        signal('exhale');
+      }
+    }
+    render();
+  }, 60);
+}
+
+// ── HUBERMAN ──────────────────────────────────────────
+function runHub() {
+  const TOTAL = 5 * 60;
+  let elapsed = 0, cyclePos = 0;
+  const I1 = 2, I2 = 0.5, EX = 4.5, CYCLE = I1 + I2 + EX;
+  let lastPhase = '', last = Date.now();
+
+  document.getElementById('sessionCenter').innerHTML = orbHTML('вдох', '5:00');
+  signal('start'); signal('inhale');
+
+  sessionTimer = setInterval(() => {
+    if (isPaused) return;
+    const now = Date.now();
+    const dt = (now - last) / 1000;
+    last = now;
+    elapsed += dt; cyclePos += dt;
+
+    if (elapsed >= TOTAL) { finishSession(); return; }
+
+    const pos = cyclePos % CYCLE;
+    let ph, prog;
+    if (pos < I1)       { ph = 'inhale1'; prog = pos / I1; }
+    else if (pos < I1+I2) { ph = 'inhale2'; prog = (pos-I1)/I2; }
+    else                { ph = 'exhale';  prog = (pos-I1-I2)/EX; }
+
+    if (ph !== lastPhase) {
+      lastPhase = ph;
+      if (ph === 'inhale1') signal('inhale');
+      else if (ph === 'exhale') signal('exhale');
+    }
+
+    const lbl = ph === 'inhale1' ? 'вдох' : ph === 'inhale2' ? 'добрать вдох' : 'выдох';
+    const s = (ph === 'inhale1' || ph === 'inhale2') ? 80 + prog * 80 : 160 - prog * 80;
+
+    const orb = document.getElementById('orb');
+    const ring = document.getElementById('orbRing');
+    const pLabel = document.getElementById('phaseLabel');
+    const bTimer = document.getElementById('bigTimer');
+    if (orb) { orb.style.width=s+'px'; orb.style.height=s+'px'; }
+    if (ring) { ring.style.width=(s+28)+'px'; ring.style.height=(s+28)+'px'; }
+    if (pLabel) pLabel.textContent = lbl;
+    if (bTimer) bTimer.textContent = fmtTime(TOTAL - elapsed);
+    document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
+  }, 60);
+}
+
+// ── BOX BREATHING ─────────────────────────────────────
+function runBox() {
+  const COUNT = setupParams.count || 4;
+  const TOTAL = 5 * 60;
+  const CYCLE = COUNT * 4;
+  const phases = ['inhale','hold','exhale','hold_exhale'];
+  const labels = ['вдох','задержка','выдох','задержка'];
+  let elapsed = 0, lastPhIdx = -1, last = Date.now();
+
+  document.getElementById('sessionCenter').innerHTML = `
+    <div class="box-wrap">
+      <svg class="box-svg" viewBox="0 0 200 200">
+        <rect class="box-track" x="20" y="20" width="160" height="160" rx="10"/>
+        <rect class="box-fill" id="boxFill" x="20" y="20" width="160" height="160" rx="10"
+          stroke-dasharray="640" stroke-dashoffset="640"/>
+      </svg>
+      <div class="box-lbl">
+        <div class="phase-label" id="phaseLabel">вдох</div>
+        <div class="big-timer" id="bigTimer" style="font-size:50px;margin-top:4px;">5:00</div>
+      </div>
+    </div>`;
+
+  signal('start'); signal('inhale');
+
+  sessionTimer = setInterval(() => {
+    if (isPaused) return;
+    const now = Date.now();
+    const dt = (now - last) / 1000;
+    last = now;
+    elapsed += dt;
+    if (elapsed >= TOTAL) { finishSession(); return; }
+
+    const pos = elapsed % CYCLE;
+    const phIdx = Math.min(Math.floor(pos / COUNT), 3);
+    const phProg = (pos % COUNT) / COUNT;
+
+    if (phIdx !== lastPhIdx) {
+      lastPhIdx = phIdx;
+      const ph = phases[phIdx];
+      if (ph === 'inhale') signal('inhale');
+      else if (ph === 'exhale') signal('exhale');
+      else signal('hold');
+    }
+
+    const totalProg = (phIdx + phProg) / 4;
+    const fill = document.getElementById('boxFill');
+    const pLabel = document.getElementById('phaseLabel');
+    const bTimer = document.getElementById('bigTimer');
+    if (fill) fill.style.strokeDashoffset = 640 * (1 - totalProg);
+    if (pLabel) pLabel.textContent = labels[phIdx];
+    if (bTimer) bTimer.textContent = fmtTime(TOTAL - elapsed);
+    document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
+  }, 60);
+}
+
+// ── MOLCHANOV ─────────────────────────────────────────
+function runMol() {
+  const steps = [];
+  for (let s = 5; s <= 15; s++) steps.push(s);
+  for (let s = 14; s >= 5; s--) steps.push(s);
+  // 21 rounds total
+
+  let stepIdx = 0, isInhale = true, phaseT = 0, last = Date.now();
+
+  function render() {
+    const dur = steps[stepIdx];
+    const prog = Math.min(phaseT / dur, 1);
+    const left = Math.max(0, dur - phaseT);
+    const wLabels = isInhale ? ['живот','рёбра','грудь'] : ['грудь','рёбра','живот'];
+    const seg = Math.min(Math.floor(prog * 3), 2);
+    const lbl = (isInhale ? 'вдох — ' : 'выдох — ') + wLabels[seg];
+
+    const center = document.getElementById('sessionCenter');
+    if (!center) return;
+    center.innerHTML = orbHTML(lbl, Math.ceil(left) + 'с',
+      `<div class="breath-counter">раунд ${stepIdx + 1} / ${steps.length} · ${steps[stepIdx]}с</div>`);
+    setOrb(isInhale ? 'inhale' : 'exhale', prog);
+    document.getElementById('sessionRoundInfo').textContent = `${stepIdx + 1} / ${steps.length}`;
+  }
+
+  render();
+  signal('start'); signal('inhale');
+
+  sessionTimer = setInterval(() => {
+    if (isPaused) return;
+    const now = Date.now();
+    const dt = (now - last) / 1000;
+    last = now;
+    phaseT += dt;
+
+    if (phaseT >= steps[stepIdx]) {
+      phaseT = 0;
+      if (!isInhale) {
+        stepIdx++;
+        if (stepIdx >= steps.length) { finishSession(); return; }
+      }
+      isInhale = !isInhale;
+      signal(isInhale ? 'inhale' : 'exhale');
+    }
+    render();
+  }, 60);
+}
+
+// ── INIT ──────────────────────────────────────────────
+renderStreak();
+</script>
+</body>
+</html>
