@@ -848,8 +848,7 @@ function runMol() {
 // ── 4-7-8 ─────────────────────────────────────────────
 function run478() {
   const CYCLE = 19;
-  const TOTAL_CYCLES = 4;
-  const TOTAL = CYCLE * TOTAL_CYCLES;
+  const TOTAL_CYCLES = Infinity;
   const phases = ['inhale','hold','exhale'];
   const labels = ['вдох','задержка','выдох'];
   const durations = [4,7,8];
@@ -881,7 +880,6 @@ function run478() {
     const dt = (now - last) / 1000;
     last = now;
     elapsed += dt; cyclePos += dt;
-    if (elapsed >= TOTAL) { finishSession(); return; }
 
     const pos = cyclePos % CYCLE;
     const cut1 = durations[0];
@@ -911,8 +909,8 @@ function run478() {
     if (left) left.style.strokeDashoffset = phIdx === 2 ? 100 * (1 - phaseProg) : 100;
     if (pLabel) pLabel.textContent = labels[phIdx];
     if (bTimer) bTimer.textContent = fmtTime(phaseLeft);
-    if (cInfo) cInfo.textContent = `цикл ${Math.min(TOTAL_CYCLES, Math.floor(elapsed / CYCLE) + 1)} / ${TOTAL_CYCLES}`;
-    document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
+    if (cInfo) cInfo.textContent = `цикл ${Math.floor(elapsed / CYCLE) + 1}`;
+    document.getElementById('sessionRoundInfo').textContent = '∞';
   }, 60);
 }
 
