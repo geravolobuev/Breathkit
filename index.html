@@ -20,6 +20,7 @@
     --hub: #ff6b9d;
     --box: #4ecdc4;
     --mol: #ffd166;
+    --four: #ff9f1c;
   }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100dvh; overflow-x:hidden; }
@@ -45,6 +46,7 @@
   .technique-card[data-tech="hub"] { --card-color:var(--hub); }
   .technique-card[data-tech="box"] { --card-color:var(--box); }
   .technique-card[data-tech="mol"] { --card-color:var(--mol); }
+  .technique-card[data-tech="478"] { --card-color:var(--four); }
   .card-dot { width:7px; height:7px; border-radius:50%; background:var(--card-color); margin-bottom:12px; }
   .card-name { font-family:'Fraunces',serif; font-size:17px; font-weight:300; line-height:1.15; }
   .card-meta { font-size:10px; color:var(--muted); margin-top:7px; letter-spacing:0.08em; }
@@ -66,6 +68,35 @@
   .params-row { display:flex; gap:8px; flex-wrap:wrap; }
   .param-chip { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:12px; color:var(--text); cursor:pointer; transition:border-color 0.15s; font-family:'DM Mono',monospace; }
   .param-chip.selected { border-color:var(--sc); color:var(--sc); }
+  .param-range-wrap { width:100%; display:flex; align-items:center; gap:12px; }
+  .param-range {
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    height:3px;
+    background:var(--border);
+    border-radius:999px;
+    outline:none;
+  }
+  .param-range::-webkit-slider-thumb {
+    -webkit-appearance:none;
+    appearance:none;
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:var(--sc);
+    box-shadow:0 0 0 4px color-mix(in srgb, var(--sc) 20%, transparent);
+    cursor:pointer;
+  }
+  .param-range::-moz-range-thumb {
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:var(--sc);
+    border:none;
+    cursor:pointer;
+  }
+  .param-range-value { min-width:56px; text-align:right; font-size:11px; color:var(--text); letter-spacing:0.08em; }
   .param-num-wrap { display:flex; align-items:center; gap:8px; }
   .param-num {
     width:100%;
@@ -121,6 +152,12 @@
   .box-fill { fill:none; stroke:var(--sc,var(--box)); stroke-width:2; stroke-linecap:round; transition:stroke-dashoffset 0.08s linear; }
   .box-lbl { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
 
+  /* Triangle */
+  .tri-wrap { position:relative; width:200px; height:200px; }
+  .tri-svg { width:100%; height:100%; }
+  .tri-track { fill:none; stroke:var(--border); stroke-width:1.5; }
+  .tri-fill { fill:none; stroke:var(--sc); stroke-width:2; stroke-linecap:round; transition:stroke-dashoffset 0.08s linear; }
+
   /* DONE */
   #done { align-items:center; justify-content:center; padding:40px 28px; text-align:center; gap:22px; }
   .done-icon { width:68px; height:68px; border-radius:50%; border:1px solid var(--sc,var(--wim)); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--sc,var(--wim)); }
@@ -158,7 +195,12 @@
     <div class="technique-card" data-tech="mol" onclick="openSetup('mol')">
       <div class="card-dot"></div>
       <div class="card-name">Молча-<br>нов</div>
-      <div class="card-meta">Пирамида · ~7 мин</div>
+      <div class="card-meta">Пирамида · 3-60с</div>
+    </div>
+    <div class="technique-card" data-tech="478" onclick="openSetup('478')">
+      <div class="card-dot"></div>
+      <div class="card-name">4‑7‑8<br>Breathing</div>
+      <div class="card-meta">4 цикла · ~2 мин</div>
     </div>
   </div>
   <div class="streak-bar">
@@ -202,8 +244,8 @@
 </div>
 
 <script>
-const COLORS = { wim:'#7b6fff', hub:'#ff6b9d', box:'#4ecdc4', mol:'#ffd166' };
-const NAMES  = { wim:'Вим Хоф', hub:'Хьюберман', box:'Box Breathing', mol:'Молчанов' };
+const COLORS = { wim:'#7b6fff', hub:'#ff6b9d', box:'#4ecdc4', mol:'#ffd166', '478':'#ff9f1c' };
+const NAMES  = { wim:'Вим Хоф', hub:'Хьюберман', box:'Box Breathing', mol:'Молчанов', '478':'4-7-8 Breathing' };
 
 let currentTech = null;
 let sessionTimer = null;
@@ -212,9 +254,14 @@ let sessionStartTime = 0;
 let audioCtx = null;
 let setupParams = {};
 const WIM_SPEEDS = [
-  { value:'fast', label:'Быстро', factor:1 },
-  { value:'medium', label:'Средне', factor:2.5 },
-  { value:'slow', label:'Медленно', factor:4 },
+  { value:'fast', label:'Быстро', seconds:1 },
+  { value:'medium', label:'Средне', seconds:2 },
+  { value:'slow', label:'Медленно', seconds:3 },
+];
+const HUB_TEMPOS = [
+  { value:1, label:'1x' },
+  { value:2, label:'2x' },
+  { value:3, label:'3x' },
 ];
 
 // ── HISTORY ──────────────────────────────────────────
@@ -295,26 +342,35 @@ const CONFIGS = {
       const speedCfg = getWimSpeedConfig(p.speed);
       const holds = getWimHolds(rounds);
       const breaths = Array.from({ length: rounds }, (_, i) => getWimBreaths(p, i));
-      const breathSec = breaths.reduce((acc, b) => acc + b * 2 * speedCfg.factor, 0);
+      const breathSec = breaths.reduce((acc, b) => acc + b * 2 * speedCfg.seconds, 0);
       const holdSec = holds.reduce((acc, h) => acc + h, 0) + rounds * 15;
       const roundsLine = breaths.map((b, i) => `R${i + 1}: <span>${b}</span>`).join(' · ');
-      return `Скорость: <span>${speedCfg.label}</span> (${speedCfg.factor}x)<br>Раунды: <span>${rounds}</span> · ${roundsLine}<br>Задержка на выдохе: ${holds.map(h => `<span>${h}</span>`).join(' / ')} сек<br>Восстановление: <span>15</span> сек каждый раунд<br>Итого: ~${fmtTime(breathSec + holdSec)}`;
+      return `Скорость: <span>${speedCfg.label}</span> (${speedCfg.seconds}с на вдох/выдох)<br>Раунды: <span>${rounds}</span> · ${roundsLine}<br>Задержка на выдохе: ${holds.map(h => `<span>${h}</span>`).join(' / ')} сек<br>Восстановление: <span>15</span> сек каждый раунд<br>Итого: ~${fmtTime(breathSec + holdSec)}`;
     }
   },
   hub: {
     name:'Хьюберман', desc:'Physiological sigh — снижение тревоги',
-    params:[],
-    preview: ()=>`Двойной вдох носом → долгий выдох ртом<br>Темп: <span>в 3 раза медленнее</span><br>Длительность: <span>5 минут</span>`
+    params:[{ label:'Темп', key:'tempo', options:HUB_TEMPOS.map(t => ({ value:t.value, label:t.label })), default:3 }],
+    preview: (p)=>`Двойной вдох носом → долгий выдох ртом<br>Темп: <span>${p.tempo || 3}x</span><br>Длительность: <span>5 минут</span>`
   },
   box: {
     name:'Box Breathing', desc:'Квадрат — баланс нервной системы',
-    params:[{ label:'Счёт', key:'count', options:[4,5,6], default:4, unit:'сек' }],
+    params:[{ label:'Счёт', key:'count', type:'range', min:4, max:20, step:1, default:4, unit:'сек' }],
     preview: (p)=>`Вдох <span>${p.count}с</span> → Задержка <span>${p.count}с</span> → Выдох <span>${p.count}с</span> → Задержка <span>${p.count}с</span><br>Длительность: <span>5 мин</span>`
   },
   mol: {
     name:'Молчанов', desc:'Пирамида фридайвера',
+    params:[{ label:'Максимум', key:'max', type:'range', min:3, max:60, step:1, default:15, unit:'сек' }],
+    preview: (p)=>{
+      const max = Math.max(3, Math.min(60, parseInt(p.max, 10) || 15));
+      const rounds = max - 3 + 1;
+      return `От <span>3с</span> до <span>${max}с</span><br>${rounds} раундов · волновое дыхание<br><span>живот → рёбра → грудь</span>`;
+    }
+  },
+  '478': {
+    name:'4-7-8', desc:'Расслабление через удлинённый выдох',
     params:[],
-    preview: ()=>`5с → ... → 15с → ... → 5с<br>21 раунд · ~7 мин<br>Волновое дыхание: <span>живот → рёбра → грудь</span>`
+    preview: ()=>`Вдох носом <span>4</span> → Задержка <span>7</span> → Выдох ртом <span>8</span><br>4 цикла · ~2 мин`
   },
 };
 
@@ -412,6 +468,30 @@ function openSetup(tech) {
         row.appendChild(wrap);
         return;
       }
+      if (param.type === 'range') {
+        const wrap = document.createElement('div');
+        wrap.className = 'param-range-wrap';
+        const input = document.createElement('input');
+        input.className = 'param-range';
+        input.type = 'range';
+        input.min = param.min;
+        input.max = param.max;
+        input.step = param.step || 1;
+        input.value = setupParams[param.key];
+        const value = document.createElement('div');
+        value.className = 'param-range-value';
+        const unit = param.unit ? ` ${param.unit}` : '';
+        value.textContent = `${input.value}${unit}`;
+        input.oninput = () => {
+          setupParams[param.key] = parseInt(input.value, 10);
+          value.textContent = `${input.value}${unit}`;
+          updatePreview();
+        };
+        wrap.appendChild(input);
+        wrap.appendChild(value);
+        row.appendChild(wrap);
+        return;
+      }
 
       param.options.forEach(optRaw => {
         const value = typeof optRaw === 'object' ? optRaw.value : optRaw;
@@ -462,6 +542,7 @@ function startSession() {
   else if (currentTech === 'hub') runHub();
   else if (currentTech === 'box') runBox();
   else if (currentTech === 'mol') runMol();
+  else if (currentTech === '478') run478();
 }
 
 function togglePause() {
@@ -528,7 +609,7 @@ function runWim() {
   let phase = 'breathing'; // 'breathing' | 'hold_exhale' | 'hold_inhale'
   let isInhale = true;
   let phaseT = 0, holdT = 0;
-  const BREATH_HALF = 1.0 * speedCfg.factor; // seconds per inhale or exhale
+  const BREATH_HALF = speedCfg.seconds; // seconds per inhale or exhale
   let last = Date.now();
   const getRoundBreaths = () => BREATHS[round] || 30;
 
@@ -609,7 +690,8 @@ function runWim() {
 function runHub() {
   const TOTAL = 5 * 60;
   let elapsed = 0, cyclePos = 0;
-  const I1 = 6, I2 = 1.5, EX = 13.5, CYCLE = I1 + I2 + EX;
+  const tempo = parseFloat(setupParams.tempo) || 3;
+  const I1 = 2 * tempo, I2 = 0.5 * tempo, EX = 4.5 * tempo, CYCLE = I1 + I2 + EX;
   let lastPhase = '', last = Date.now();
 
   document.getElementById('sessionCenter').innerHTML = orbHTML('вдох', '5:00');
@@ -658,7 +740,7 @@ function runHub() {
 
 // ── BOX BREATHING ─────────────────────────────────────
 function runBox() {
-  const COUNT = setupParams.count || 4;
+  const COUNT = Math.max(4, Math.min(20, parseInt(setupParams.count, 10) || 4));
   const TOTAL = 5 * 60;
   const CYCLE = COUNT * 4;
   const phases = ['inhale','hold','exhale','hold_exhale'];
@@ -717,10 +799,9 @@ function runBox() {
 
 // ── MOLCHANOV ─────────────────────────────────────────
 function runMol() {
+  const max = Math.max(3, Math.min(60, parseInt(setupParams.max, 10) || 15));
   const steps = [];
-  for (let s = 5; s <= 15; s++) steps.push(s);
-  for (let s = 14; s >= 5; s--) steps.push(s);
-  // 21 rounds total
+  for (let s = 3; s <= max; s++) steps.push(s);
 
   let stepIdx = 0, isInhale = true, phaseT = 0, last = Date.now();
 
@@ -760,6 +841,69 @@ function runMol() {
       signal(isInhale ? 'inhale' : 'exhale');
     }
     render();
+  }, 60);
+}
+
+// ── 4-7-8 ─────────────────────────────────────────────
+function run478() {
+  const CYCLE = 19;
+  const TOTAL_CYCLES = 4;
+  const TOTAL = CYCLE * TOTAL_CYCLES;
+  const phases = ['inhale','hold','exhale'];
+  const labels = ['вдох','задержка','выдох'];
+  const durations = [4,7,8];
+  let elapsed = 0, cyclePos = 0, lastPhIdx = -1, last = Date.now();
+
+  document.getElementById('sessionCenter').innerHTML = `
+    <div class="tri-wrap">
+      <svg class="tri-svg" viewBox="0 0 200 200">
+        <path class="tri-track" d="M100 18 L182 176 L18 176 Z"/>
+        <path class="tri-fill" id="triFill" d="M100 18 L182 176 L18 176 Z" pathLength="100"
+          stroke-dasharray="100" stroke-dashoffset="100"/>
+      </svg>
+      <div class="box-lbl">
+        <div class="phase-label" id="phaseLabel">вдох</div>
+        <div class="big-timer" id="bigTimer" style="font-size:50px;margin-top:4px;">4с</div>
+        <div class="breath-counter" id="cycleInfo">цикл 1 / 4</div>
+      </div>
+    </div>`;
+
+  signal('start'); signal('inhale');
+
+  sessionTimer = setInterval(() => {
+    if (isPaused) return;
+    const now = Date.now();
+    const dt = (now - last) / 1000;
+    last = now;
+    elapsed += dt; cyclePos += dt;
+    if (elapsed >= TOTAL) { finishSession(); return; }
+
+    const pos = cyclePos % CYCLE;
+    const cut1 = durations[0];
+    const cut2 = durations[0] + durations[1];
+    let phIdx = 0;
+    if (pos >= cut2) phIdx = 2;
+    else if (pos >= cut1) phIdx = 1;
+    const phaseLeft = phIdx === 0 ? cut1 - pos : phIdx === 1 ? cut2 - pos : CYCLE - pos;
+
+    if (phIdx !== lastPhIdx) {
+      lastPhIdx = phIdx;
+      const ph = phases[phIdx];
+      if (ph === 'inhale') signal('inhale');
+      else if (ph === 'exhale') signal('exhale');
+      else signal('hold');
+    }
+
+    const totalProg = (pos / CYCLE);
+    const fill = document.getElementById('triFill');
+    const pLabel = document.getElementById('phaseLabel');
+    const bTimer = document.getElementById('bigTimer');
+    const cInfo = document.getElementById('cycleInfo');
+    if (fill) fill.style.strokeDashoffset = 100 * (1 - totalProg);
+    if (pLabel) pLabel.textContent = labels[phIdx];
+    if (bTimer) bTimer.textContent = fmtTime(phaseLeft);
+    if (cInfo) cInfo.textContent = `цикл ${Math.min(TOTAL_CYCLES, Math.floor(elapsed / CYCLE) + 1)} / ${TOTAL_CYCLES}`;
+    document.getElementById('sessionRoundInfo').textContent = fmtTime(TOTAL - elapsed);
   }, 60);
 }
 
